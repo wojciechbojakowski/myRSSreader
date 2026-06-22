@@ -253,8 +253,7 @@
         StateHasChanged();
 
         var tempArticles = new List<RssItemDto>();
-        // Adres Twojego backendu z Kroku 1
-        var baseBackendUrl = "https://localhost:5152/api/feed/parse?url=";
+        var baseBackendUrl = "https://my-rss-reader-api.onrender.com/feed/parse?url=";
 
         foreach (var feed in userFeeds)
         {
