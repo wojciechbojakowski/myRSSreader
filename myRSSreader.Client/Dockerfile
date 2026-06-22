@@ -11,4 +11,4 @@ WORKDIR /usr/share/nginx/html
 COPY --from=build /app/publish/wwwroot .
 COPY --from=build /app/publish/wwwroot/index.html /usr/share/nginx/html/404.html
 EXPOSE 80
-CMD["nginx", "-g", "deamon off;"]
+CMD ["nginx", "-g", "daemon off;"]
