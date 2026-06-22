@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="myRSSreader.Client/myRSSreader.Client.csproj" />
+  <Project Path="myRSSreader.Server/myRSSreader.Server.csproj" />
+</Solution>

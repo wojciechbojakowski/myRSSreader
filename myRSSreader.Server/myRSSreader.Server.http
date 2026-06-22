@@ -1,0 +1,6 @@
+@myRSSreader.Server_HostAddress = http://localhost:5152
+
+GET {{myRSSreader.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,412 @@
+﻿@page "/"
+@using myRSSreader.Client.Models
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Czytnik RSS - Świat w 10 Minut</PageTitle>
+
+<div class="container-fluid mt-3">
+    <div class="row">
+        
+        <div class="col-md-3 mb-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">➕ Dodaj kanał</h5>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm mb-1" placeholder="Nazwa (np. GryOnline)" @bind="newFeedName" />
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="URL kanału RSS" @bind="newFeedUrl" />
+                        <button class="btn btn-primary btn-sm w-100" @onclick="AddFeed">Dodaj do listy</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-2">
+                    <h5 class="card-title px-2 fw-bold">📋 Twoje Kanały</h5>
+                    <div class="list-group list-group-flush">
+                        <button class="list-group-item list-group-item-action @(selectedFeedId == null ? "active" : "")" @onclick="() => SelectFeed(null)">
+                            🌐 Wszystkie wiadomości
+                        </button>
+                        @foreach (var feed in userFeeds)
+                        {
+                            <div class="d-flex align-items-center list-group-item p-0 @(selectedFeedId == feed.Id ? "bg-light" : "")">
+                                <button class="btn btn-link text-start text-decoration-none flex-grow-1 text-dark py-2 ps-3 btn-sm" @onclick="() => SelectFeed(feed.Id)">
+                                    🎮 @feed.Name
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm me-2 border-0" @onclick="() => DeleteFeed(feed.Id)">🗑️</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="bg-white p-3 rounded shadow-sm mb-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h2 class="h4 mb-0 fw-bold">
+                            @(selectedFeedId == null ? "Wszystkie wiadomości" : userFeeds.FirstOrDefault(f => f.Id == selectedFeedId)?.Name)
+                        </h2>
+                        <small class="text-muted">Widocznych artykułów: @displayedArticles.Count</small>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button class="btn @(smartMode ? "btn-warning fw-bold" : "btn-outline-secondary")" @onclick="ToggleSmartMode">
+                            ⚡ Świat w 10 minut @(smartMode ? "ON" : "OFF")
+                        </button>
+                        <button class="btn btn-success" @onclick="RefreshFeeds" disabled="@(!userFeeds.Any() || isLoading)">
+                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            🔄 Odśwież
+                        </button>
+                    </div>
+                </div>
+
+                <hr />
+
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn @(currentFilter == FilterType.All ? "btn-dark" : "btn-outline-dark")" @onclick="() => SetFilter(FilterType.All)">
+                        📰 Wszystkie
+                    </button>
+                    <button type="button" class="btn @(currentFilter == FilterType.Unread ? "btn-dark" : "btn-outline-dark")" @onclick="() => SetFilter(FilterType.Unread)">
+                        🔵 Nieprzeczytane
+                    </button>
+                    <button type="button" class="btn @(currentFilter == FilterType.Saved ? "btn-dark" : "btn-outline-dark")" @onclick="() => SetFilter(FilterType.Saved)">
+                        ⭐ Zapisane (@savedArticleLinks.Count)
+                    </button>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="text-center my-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Pobieranie i analizowanie artykułów...</p>
+                </div>
+            }
+            else if (!displayedArticles.Any())
+            {
+                <div class="alert alert-info shadow-sm">
+                    Brak artykułów spełniających kryteria wybranego filtra.
+                </div>
+            }
+            else if (smartMode)
+            {
+                <div class="row">
+                    @foreach (var group in groupedArticles)
+                    {
+                        var mainArticle = group.First();
+                        var isGroupRead = group.All(a => readArticleLinks.Contains(a.Link));
+
+                        <div class="col-12 mb-3" style="@(isGroupRead ? "opacity: 0.5;" : "")">
+                            <div class="card border-start border-warning border-4 shadow-sm">
+                                <div class="card-body">
+                                    <span class="badge bg-danger mb-2">🔥 Gorący temat (@group.Count źródła)</span>
+                                    <h5 class="card-title fw-bold">@mainArticle.Title</h5>
+                                    <p class="card-text text-secondary">@((MarkupString)CleanHtml(mainArticle.Description))</p>
+                                    
+                                    <div class="bg-white p-2 rounded border">
+                                        <small class="text-muted d-block mb-2 fw-bold">Przeczytaj w różnych źródłach:</small>
+                                        @foreach (var article in group)
+                                        {
+                                            var isRead = readArticleLinks.Contains(article.Link);
+                                            <a href="@article.Link" target="_blank" class="btn btn-sm @(isRead ? "btn-secondary" : "btn-outline-primary") me-2 mb-1" @onclick="() => MarkAsRead(article.Link)">
+                                                @(isRead ? "✓ " : "") @(article.Description.Contains("]") ? article.Description.Split(']')[0] + "]" : "Link") ↗
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="row">
+                    @foreach (var article in displayedArticles)
+                    {
+                        var isRead = readArticleLinks.Contains(article.Link);
+                        var isSaved = savedArticleLinks.Contains(article.Link);
+
+                        <div class="col-12 mb-3" style="@(isRead ? "opacity: 0.55; transition: opacity 0.3s;" : "")">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body d-flex flex-column justify-content-between">
+                                    <div>
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <h5 class="card-title fw-bold text-dark mb-1">@article.Title</h5>
+                                            <button class="btn btn-link text-decoration-none p-0 fs-5 line-height-1" @onclick="() => ToggleSaveArticle(article.Link)">
+                                                @(isSaved ? "⭐" : "☆")
+                                            </button>
+                                        </div>
+                                        <h6 class="card-subtitle mb-2 text-muted small">📅 @article.PublishDate.ToString("g")</h6>
+                                        <p class="card-text text-secondary">@((MarkupString)CleanHtml(article.Description))</p>
+                                    </div>
+                                    
+                                    <div class="d-flex gap-2 mt-3 justify-content-end border-top pt-2">
+                                        <button class="btn btn-sm @(isRead ? "btn-outline-secondary" : "btn-light")" @onclick="() => ToggleReadStatus(article.Link)">
+                                            @(isRead ? "Oznacz jako nieprzeczytane" : "👁️ Przeczytane")
+                                        </button>
+                                        <a href="@article.Link" target="_blank" class="btn btn-sm btn-primary px-3" @onclick="() => MarkAsRead(article.Link)">
+                                            Czytaj pełny ↗
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private List<RssFeed> userFeeds = new();
+    private List<RssItemDto> allCachedArticles = new();
+    private List<RssItemDto> displayedArticles = new();
+    private List<List<RssItemDto>> groupedArticles = new();
+
+    private string newFeedName = "";
+    private string newFeedUrl = "";
+    private string? selectedFeedId = null;
+    private bool isLoading = false;
+    private bool smartMode = false;
+
+    private HashSet<string> readArticleLinks = new();
+    private HashSet<string> savedArticleLinks = new();
+
+    private enum FilterType{All, Unread, Saved}
+    private FilterType currentFilter = FilterType.All;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Wczytaj kanały
+        var feedsJson = await JS.InvokeAsync<string>("localStorage.getItem", "user_feeds");
+        if (!string.IsNullOrEmpty(feedsJson))
+        {
+            userFeeds = JsonSerializer.Deserialize<List<RssFeed>>(feedsJson) ?? new();
+        }
+
+        // 2. Wczytaj zapisane artykuły
+        var articlesJson = await JS.InvokeAsync<string>("localStorage.getItem", "cached_articles");
+        if (!string.IsNullOrEmpty(articlesJson))
+        {
+            allCachedArticles = JsonSerializer.Deserialize<List<RssItemDto>>(articlesJson) ?? new();
+        }
+
+        var readJson = await JS.InvokeAsync<string>("localStorage.getItem", "user_read_links");
+        if(!string.IsNullOrEmpty(readJson)){
+            readArticleLinks = JsonSerializer.Deserialize<HashSet<string>>(readJson) ?? new();
+        }
+
+        var savedJson = await JS.InvokeAsync<string>("localStorage.getItem", "user_saved_links");
+        if(!string.IsNullOrEmpty(savedJson)){
+            savedArticleLinks = JsonSerializer.Deserialize<HashSet<string>>(savedJson) ?? new();
+        }
+
+        UpdateDisplay();
+    }
+
+    private async Task AddFeed()
+    {
+        if (string.IsNullOrWhiteSpace(newFeedUrl)) return;
+
+        var feed = new RssFeed
+        {
+            Name = string.IsNullOrWhiteSpace(newFeedName) ? "Kanał " + (userFeeds.Count + 1) : newFeedName,
+            Url = newFeedUrl
+        };
+
+        userFeeds.Add(feed);
+        await JS.InvokeVoidAsync("localStorage.setItem", "user_feeds", JsonSerializer.Serialize(userFeeds));
+        newFeedName = "";
+        newFeedUrl = "";
+    }
+
+    private async Task DeleteFeed(string id)
+    {
+        userFeeds.RemoveAll(f => f.Id == id);
+        await JS.InvokeVoidAsync("localStorage.setItem", "user_feeds", JsonSerializer.Serialize(userFeeds));
+        if (selectedFeedId == id) selectedFeedId = null;
+        UpdateDisplay();
+    }
+
+    private void SelectFeed(string? id)
+    {
+        selectedFeedId = id;
+        UpdateDisplay();
+    }
+
+    private void ToggleSmartMode()
+    {
+        smartMode = !smartMode;
+        UpdateDisplay();
+    }
+
+    private async Task RefreshFeeds()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        var tempArticles = new List<RssItemDto>();
+        // Adres Twojego backendu z Kroku 1
+        var baseBackendUrl = "https://localhost:5152/api/feed/parse?url=";
+
+        foreach (var feed in userFeeds)
+        {
+            try
+            {
+                var url = baseBackendUrl + Uri.EscapeDataString(feed.Url);
+                Console.WriteLine($"URL:{url}");
+                var result = await Http.GetFromJsonAsync<List<RssItemDto>>(url);
+                if (result != null)
+                {
+                    
+                    result.ForEach(a => a.Description = $"[Źródło: {feed.Name}] " + a.Description);
+                    tempArticles.AddRange(result);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Błąd pobierania z {feed.Name}: {ex.Message}");
+            }
+        }
+
+        
+        allCachedArticles = tempArticles
+            .GroupBy(a => a.Link)
+            .Select(g => g.First())
+            .OrderByDescending(a => a.PublishDate)
+            .ToList();
+
+        // Zapis do pamięci podręcznej PWA
+        await JS.InvokeVoidAsync("localStorage.setItem", "cached_articles", JsonSerializer.Serialize(allCachedArticles));
+
+        isLoading = false;
+        UpdateDisplay();
+    }
+
+    private void UpdateDisplay()
+    {
+        
+        var tempArticles = allCachedArticles;
+        if (selectedFeedId != null)
+        {
+            var selectedFeed = userFeeds.FirstOrDefault(f => f.Id == selectedFeedId);
+            tempArticles = allCachedArticles
+                .Where(a => a.Description.Contains($"[Źródło: {selectedFeed?.Name}]"))
+                .ToList();
+        }
+
+        if (currentFilter == FilterType.Unread)
+        {
+            displayedArticles = tempArticles.Where(a => !readArticleLinks.Contains(a.Link)).ToList();
+        }
+        else if (currentFilter == FilterType.Saved)
+        {
+            displayedArticles = tempArticles.Where(a => savedArticleLinks.Contains(a.Link)).ToList();
+        }
+        else
+        {
+            displayedArticles = tempArticles;
+        }
+
+        if (smartMode)
+        {
+            ClusterArticles();
+        }
+    }
+
+
+    private void ClusterArticles()
+    {
+        groupedArticles = new List<List<RssItemDto>>();
+        var unclustered = displayedArticles.ToList();
+
+        while (unclustered.Any())
+        {
+            var current = unclustered.First();
+            unclustered.Remove(current);
+
+            var currentGroup = new List<RssItemDto> { current };
+            var tokens1 = GetKeywords(current.Title);
+
+            var matches = new List<RssItemDto>();
+
+            foreach (var target in unclustered)
+            {
+                var tokens2 = GetKeywords(target.Title);
+                
+                double intersection = tokens1.Intersect(tokens2).Count();
+                double union = tokens1.Union(tokens2).Count();
+                double similarity = union > 0 ? intersection / union : 0;
+
+                if (similarity > 0.25)
+                {
+                    matches.Add(target);
+                }
+            }
+
+            foreach (var match in matches)
+            {
+                currentGroup.Add(match);
+                unclustered.Remove(match);
+            }
+
+            groupedArticles.Add(currentGroup);
+        }
+
+        groupedArticles = groupedArticles.OrderByDescending(g => g.Count).ToList();
+    }
+
+    private HashSet<string> GetKeywords(string title)
+    {
+        var cleanTitle = Regex.Replace(title.ToLower(), @"[^\w\s]", "");
+        var words = cleanTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var stopWords = new HashSet<string> { "w", "z", "i", "o", "na", "do", "dla", "oraz", "a", "że", "się", "jest", "nowy", "nowa" };
+        
+        return words.Where(w => w.Length > 2 && !stopWords.Contains(w)).ToHashSet();
+    }
+
+    private string CleanHtml(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return string.Empty;
+        var clean = Regex.Replace(html, "<.*?>", string.Empty);
+        return clean.Length > 250 ? clean.Substring(0, 250) + "..." : clean;
+    }
+
+    private async Task MarkAsRead(string link){
+        if(readArticleLinks.Add(link)){
+            await JS.InvokeVoidAsync("localStorage.setItem", "user_read_links", JsonSerializer.Serialize(readArticleLinks));
+        }
+    }
+
+    private async Task ToggleReadStatus(string link){
+        if(readArticleLinks.Contains(link)){
+            readArticleLinks.Remove(link);
+        }else{
+            readArticleLinks.Add(link);
+        }
+
+        await JS.InvokeVoidAsync("localStorage.setItem", "user_read_links", JsonSerializer.Serialize(readArticleLinks));
+    }
+
+    private async Task ToggleSaveArticle(string link){
+        if(savedArticleLinks.Contains(link)){
+            savedArticleLinks.Remove(link);
+        }else{
+            savedArticleLinks.Add(link);
+        }
+
+        await JS.InvokeVoidAsync("localStorage.setItem", "user_saved_links", JsonSerializer.Serialize(savedArticleLinks));
+    }
+
+    private void SetFilter(FilterType filter){
+        currentFilter = filter;
+        UpdateDisplay();
+    }
+}
