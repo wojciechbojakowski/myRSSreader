@@ -1,9 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY ["myRSSreader.Client.csproj", "./"]
-RUN dotnet restore "myRSSreader.Client.csproj"
+COPY ["myRSSreader.Client/myRSSreader.Client.csproj", "myRSSreader.Client/"]
+RUN dotnet restore "myRSSreader.Client/myRSSreader.Client.csproj"
 COPY . .
+WORKDIR "/src/myRSSreader.Client"
 RUN dotnet publish "myRSSreader.Client.csproj" -c Release -o /app/publish
 
 FROM nginx:alpine AS final
