@@ -8,7 +8,7 @@ COPY . .
 WORKDIR "/src/myRSSreader.Server"
 RUN dotnet publish "myRSSreader.Server.csproj" -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet.aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
