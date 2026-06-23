@@ -6,5 +6,5 @@ public class RssItemDto
     public string Link {get;set;}=string.Empty;
     public string Description {get;set;}=string.Empty;
     public DateTimeOffset PublishDate {get;set;}
-
+    public string SourceUrl {get; set;} = string.Empty;
 }

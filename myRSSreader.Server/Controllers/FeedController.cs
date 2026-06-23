@@ -39,7 +39,8 @@ public class FeedController : ControllerBase
                 Title = item.Title?.Text ?? "Brak tytułu",
                 Link = item.Links.FirstOrDefault()?.Uri.ToString() ?? item.Id ?? String.Empty,
                 Description = item.Summary?.Text ?? "Brak Opisu",
-                PublishDate = item.PublishDate
+                PublishDate = item.PublishDate,
+                SourceUrl = url
             }).ToList();
 
             return Ok(items);

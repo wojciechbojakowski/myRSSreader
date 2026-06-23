@@ -12,33 +12,57 @@
         
         <div class="col-md-3 mb-4">
             <div class="card shadow-sm mb-3">
-                <div class="card-body">
-                    <h5 class="card-title fw-bold">➕ Dodaj kanał</h5>
-                    <div class="mb-2">
-                        <input type="text" class="form-control form-control-sm mb-1" placeholder="Nazwa (np. GryOnline)" @bind="newFeedName" />
-                        <input type="text" class="form-control form-control-sm mb-2" placeholder="URL kanału RSS" @bind="newFeedUrl" />
-                        <button class="btn btn-primary btn-sm w-100" @onclick="AddFeed">Dodaj do listy</button>
-                    </div>
+                <div class="card-header bg-dark text-white fw-bold">
+                    📁 Kategorie i Źródła
+                </div>
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center @(selectedCategory == null && selectedFeedId == null ? "active" : "")" 
+                            @onclick="SelectAllCategory">
+                        🌐 Wszystkie wiadomości
+                    </button>
+
+                    @foreach (var group in userFeeds.GroupBy(f => f.Category))
+                    {
+                        <div class="bg-light px-3 py-2 small fw-bold text-secondary border-bottom border-top d-flex justify-content-between align-items-center">
+                            <span>📁 @group.Key.ToUpper()</span>
+                            <button class="btn btn-badge btn-xs @(selectedCategory == group.Key ? "btn-primary" : "btn-outline-secondary") py-0 px-1" 
+                                    style="font-size: 0.7rem;" @onclick="() => SelectCategory(group.Key)">
+                                Filtruj grupę
+                            </button>
+                        </div>
+
+                        @foreach (var feed in group)
+                        {
+                            <div class="list-group-item d-flex justify-content-between align-items-center ps-4 @(selectedFeedId == feed.Id ? "bg-warning-subtle fw-bold" : "")">
+                                <span class="text-truncate cursor-pointer style-none" style="max-width: 70%;" @onclick="() => SelectFeed(feed.Id)">
+                                    ℹ️ @feed.Name
+                                </span>
+                                <button class="btn btn-sm text-danger p-0 px-1" @onclick="() => DeleteFeed(feed.Id)" title="Usuń kanał">
+                                    ❌
+                                </button>
+                            </div>
+                        }
+                    }
                 </div>
             </div>
 
             <div class="card shadow-sm">
+                <div class="card-header bg-light fw-bold text-secondary">
+                    ➕ Dodaj nowe źródło
+                </div>
                 <div class="card-body p-2">
-                    <h5 class="card-title px-2 fw-bold">📋 Twoje Kanały</h5>
-                    <div class="list-group list-group-flush">
-                        <button class="list-group-item list-group-item-action @(selectedFeedId == null ? "active" : "")" @onclick="() => SelectFeed(null)">
-                            🌐 Wszystkie wiadomości
-                        </button>
-                        @foreach (var feed in userFeeds)
+                    <input type="text" class="form-control form-control-sm mb-2" placeholder="Nazwa (np. Spider's Web)" @bind="newFeedName" />
+                    <input type="text" class="form-control form-control-sm mb-2" placeholder="Adres URL RSS" @bind="newFeedUrl" />
+                    
+                    <input type="text" class="form-control form-control-sm mb-2" placeholder="Kategoria (np. Tech, Świat, Gry)" @bind="newFeedCategory" list="categories-datalist" />
+                    <datalist id="categories-datalist">
+                        @foreach (var cat in userFeeds.Select(f => f.Category).Distinct())
                         {
-                            <div class="d-flex align-items-center list-group-item p-0 @(selectedFeedId == feed.Id ? "bg-light" : "")">
-                                <button class="btn btn-link text-start text-decoration-none flex-grow-1 text-dark py-2 ps-3 btn-sm" @onclick="() => SelectFeed(feed.Id)">
-                                    🎮 @feed.Name
-                                </button>
-                                <button class="btn btn-outline-danger btn-sm me-2 border-0" @onclick="() => DeleteFeed(feed.Id)">🗑️</button>
-                            </div>
+                            <option value="@cat"></option>
                         }
-                    </div>
+                    </datalist>
+
+                    <button class="btn btn-sm btn-primary w-100" @onclick="AddFeed">Dodaj</button>
                 </div>
             </div>
         </div>
@@ -181,7 +205,10 @@
 
     private enum FilterType{All, Unread, Saved}
     private FilterType currentFilter = FilterType.All;
-    
+
+    private string newFeedCategory = "General";
+    private string? selectedCategory = null;
+
     protected override async Task OnInitializedAsync()
     {
         // 1. Wczytaj kanały
@@ -213,7 +240,7 @@
             var existingLinks = allCachedArticles.Select(a => a.Link).ToHashSet();
 
             int beforeCount = readArticleLinks.Count;
-            
+
             readArticleLinks.IntersectWith(existingLinks);
 
             if (readArticleLinks.Count < beforeCount)
@@ -233,13 +260,16 @@
         var feed = new RssFeed
         {
             Name = string.IsNullOrWhiteSpace(newFeedName) ? "Kanał " + (userFeeds.Count + 1) : newFeedName,
-            Url = newFeedUrl
+            Url = newFeedUrl.Trim(),
+            Category = string.IsNullOrWhiteSpace(newFeedCategory) ? "General" : newFeedCategory.Trim()
         };
 
         userFeeds.Add(feed);
         await JS.InvokeVoidAsync("localStorage.setItem", "user_feeds", JsonSerializer.Serialize(userFeeds));
         newFeedName = "";
         newFeedUrl = "";
+        newFeedCategory = "General";
+        UpdateDisplay();
     }
 
     private async Task DeleteFeed(string id)
@@ -253,6 +283,7 @@
     private void SelectFeed(string? id)
     {
         selectedFeedId = id;
+        selectedCategory = null;
         UpdateDisplay();
     }
 
@@ -275,11 +306,14 @@
             try
             {
                 var url = baseBackendUrl + Uri.EscapeDataString(feed.Url);
+                #if DEBUG
+                    url = "http://localhost:5152/"+url;
+                #endif
                 Console.WriteLine($"URL:{url}");
                 var result = await Http.GetFromJsonAsync<List<RssItemDto>>(url);
                 if (result != null)
                 {
-                    
+
                     result.ForEach(a => a.Description = $"[Źródło: {feed.Name}] " + a.Description);
                     tempArticles.AddRange(result);
                 }
@@ -290,7 +324,7 @@
             }
         }
 
-        
+
         allCachedArticles = tempArticles
             .GroupBy(a => a.Link)
             .Select(g => g.First())
@@ -306,14 +340,21 @@
 
     private void UpdateDisplay()
     {
-        
+
         var tempArticles = allCachedArticles;
-        if (selectedFeedId != null)
+        if (selectedCategory != null)
+        {
+            HashSet<string> selectedUrl = userFeeds.Where(f => f.Category == selectedCategory).Select(f => f.Url).ToHashSet();
+            tempArticles = allCachedArticles.Where(item=> selectedUrl.Contains(item.SourceUrl)).ToList<RssItemDto>();            
+        }
+        else if (selectedFeedId != null)
         {
             var selectedFeed = userFeeds.FirstOrDefault(f => f.Id == selectedFeedId);
-            tempArticles = allCachedArticles
-                .Where(a => a.Description.Contains($"[Źródło: {selectedFeed?.Name}]"))
+            if (selectedFeed != null){
+                tempArticles = allCachedArticles
+                .Where(a => a.SourceUrl == selectedFeed.Url)
                 .ToList();
+            }
         }
 
         if (currentFilter == FilterType.Unread)
@@ -421,6 +462,18 @@
 
     private void SetFilter(FilterType filter){
         currentFilter = filter;
+        UpdateDisplay();
+    }
+
+    private void SelectCategory(string category){
+        selectedCategory = category;
+        selectedFeedId=null;
+        UpdateDisplay();
+    }
+
+    private void SelectAllCategory(){
+        selectedCategory = null;
+        selectedFeedId = null;
         UpdateDisplay();
     }
 }
