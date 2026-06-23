@@ -208,6 +208,21 @@
             savedArticleLinks = JsonSerializer.Deserialize<HashSet<string>>(savedJson) ?? new();
         }
 
+        if (allCachedArticles.Any() && readArticleLinks.Any())
+        {
+            var existingLinks = allCachedArticles.Select(a => a.Link).ToHashSet();
+
+            int beforeCount = readArticleLinks.Count;
+            
+            readArticleLinks.IntersectWith(existingLinks);
+
+            if (readArticleLinks.Count < beforeCount)
+            {
+                Console.WriteLine($"🗑️ Śmieciarka: Usunięto {beforeCount - readArticleLinks.Count} starych linków z historii.");
+                await JS.InvokeVoidAsync("localStorage.setItem", "user_read_links", JsonSerializer.Serialize(readArticleLinks));
+            }
+        }
+
         UpdateDisplay();
     }
 
