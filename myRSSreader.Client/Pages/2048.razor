@@ -1,0 +1,338 @@
+@page "/2048"
+
+<PageTitle>2048</PageTitle>
+
+<h1>2048</h1>
+
+<p role="status">Current Sum: @currentSum</p>
+
+@if (isGameOver)
+{
+    <div class="game-over-overlay">
+        <h2>Koniec Gry!</h2>
+        <p>Twój końcowy wynik: @currentSum</p>
+        <button @onclick="RestartGame">Zagraj ponownie</button>
+    </div>
+}
+
+<div class="grid-container game-container" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd" @onkeydown="HandleKeyDown" tabindex="0">
+    @for (int r = 0; r < 4; r++)
+    {
+        @for (int c = 0; c < 4; c++)
+        {
+            <div class="tile tile-@board[r, c]">
+                @(board[r, c] > 0 ? board[r, c].ToString() : "")
+            </div>
+        }
+    }
+</div>
+
+
+@code {
+    private bool isGameOver = false;
+    private Random rand = new Random();
+    private int currentSum = 0;
+    public int[,] board = new int[4, 4];
+
+    private double touchStartX;
+    private double touchStartY;
+    private const double MinimumSwipeDistance = 50;
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        var touch = e.Touches.FirstOrDefault();
+        if (touch != null)
+        {
+            touchStartX = touch.ClientX;
+            touchStartY = touch.ClientY;
+        }
+    }
+
+    private void HandleTouchEnd(TouchEventArgs e)
+    {
+        var touch = e.ChangedTouches.FirstOrDefault();
+        if (touch == null) return;
+
+        double deltaX = touch.ClientX - touchStartX;
+        double deltaY = touch.ClientY - touchStartY;
+
+        if (Math.Abs(deltaX) > Math.Abs(deltaY))
+        {
+            // Ruch poziomy
+            if (Math.Abs(deltaX) > MinimumSwipeDistance)
+            {
+                if (deltaX > 0)
+                    MoveRight();
+                else
+                    MoveLeft();
+            }
+        }
+        else
+        {
+            if (Math.Abs(deltaY) > MinimumSwipeDistance)
+            {
+                if (deltaY > 0)
+                    MoveDown();
+                else
+                    MoveUp();
+            }
+        }
+    }
+    private bool HasZero(int[,] array){
+        for (int r = 0; r < array.GetLength(0); r++){
+            for (int c = 0; c < array.GetLength(1); c++){
+                if (array[r, c] == 0){
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    private void GenerateNew()
+    {
+        var emptyCells = new List<(int r, int c)>();
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 4; c++)
+                if (board[r, c] == 0) emptyCells.Add((r, c));
+
+        if (emptyCells.Count == 0)
+        {
+            CheckGameOver();
+            return;
+        }
+
+        var (row, col) = emptyCells[rand.Next(emptyCells.Count)];
+        board[row, col] = rand.Next(0, 10) < 9 ? 2 : 4; // 90% szans na 2, 10% na 4 (jak w oryginale)
+    }
+
+    protected override void OnInitialized()
+    {
+        GenerateNew();
+        GenerateNew();
+    }
+
+    private void CheckGameOver(){
+    if (HasZero(board)) return;
+
+    for (int r = 0; r < 4; r++)
+    {
+        for (int c = 0; c < 4; c++)
+        {
+            // Sprawdzenie w prawo
+            if (c + 1 < 4 && board[r, c] == board[r, c + 1]) return;
+            // Sprawdzenie w dół
+            if (r + 1 < 4 && board[r, c] == board[r + 1, c]) return;
+        }
+    }
+
+    isGameOver = true;
+}
+
+    private void RestartGame(){
+        board = new int[4, 4];
+        currentSum = 0;
+        isGameOver = false;
+        
+        GenerateNew();
+        GenerateNew();
+    }
+    private void MoveDown() {
+        bool moved = false;
+
+        for (int col = 0; col < 4; col++)
+        {
+            List<int> numbers = new List<int>();
+            for (int row = 3; row >= 0; row--)
+            {
+                if (board[row, col] != 0)
+                {
+                    numbers.Add(board[row, col]);
+                }
+            }
+
+            List<int> mergedNumbers = new List<int>();
+            for (int i = 0; i < numbers.Count; i++)
+            {
+                if (i + 1 < numbers.Count && numbers[i] == numbers[i + 1])
+                {
+                    mergedNumbers.Add(numbers[i] * 2);
+                    currentSum += numbers[i] * 2;
+                    i++;
+                }
+                else
+                {
+                    mergedNumbers.Add(numbers[i]);
+                }
+            }
+
+            for (int row = 3; row >= 0; row--)
+            {
+                int indexInList = 3 - row;
+                int newValue = indexInList < mergedNumbers.Count ? mergedNumbers[indexInList] : 0;
+
+                if (board[row, col] != newValue)
+                {
+                    board[row, col] = newValue;
+                    moved = true; 
+                }
+            }
+        }
+
+        if (moved)
+        {
+            GenerateNew();
+        }
+    }
+    private void MoveUp() {
+        bool moved = false;
+
+        for (int col = 0; col < 4; col++)
+        {
+            List<int> numbers = new List<int>();
+            for (int row = 0; row < 4; row++)
+            {
+                if (board[row, col] != 0)
+                {
+                    numbers.Add(board[row, col]);
+                }
+            }
+
+            List<int> mergedNumbers = new List<int>();
+            for (int i = 0; i < numbers.Count; i++)
+            {
+                if (i + 1 < numbers.Count && numbers[i] == numbers[i + 1])
+                {
+                    mergedNumbers.Add(numbers[i] * 2);
+                    currentSum += numbers[i] * 2;
+                    i++;
+                }
+                else
+                {
+                    mergedNumbers.Add(numbers[i]);
+                }
+            }
+
+            for (int row = 0; row < 4; row++)
+            {
+                int indexInList = row;
+                int newValue = indexInList < mergedNumbers.Count ? mergedNumbers[indexInList] : 0;
+
+                if (board[row, col] != newValue)
+                {
+                    board[row, col] = newValue;
+                    moved = true; 
+                }
+            }
+        }
+
+        if (moved)
+        {
+            GenerateNew();
+        }
+    }
+    private void MoveLeft() { 
+        bool moved = false;
+
+        for (int row = 0; row < 4; row++)
+        {
+            List<int> numbers = new List<int>();
+            for (int col = 0; col < 4; col++)
+            {
+                if (board[row, col] != 0)
+                {
+                    numbers.Add(board[row, col]);
+                }
+            }
+
+            List<int> mergedNumbers = new List<int>();
+            for (int i = 0; i < numbers.Count; i++)
+            {
+                if (i + 1 < numbers.Count && numbers[i] == numbers[i + 1])
+                {
+                    mergedNumbers.Add(numbers[i] * 2);
+                    currentSum += numbers[i] * 2;
+                    i++;
+                }
+                else
+                {
+                    mergedNumbers.Add(numbers[i]);
+                }
+            }
+
+            for (int col = 0; col < 4; col++)
+            {
+                int indexInList = col; 
+                int newValue = indexInList < mergedNumbers.Count ? mergedNumbers[indexInList] : 0;
+
+                if (board[row, col] != newValue)
+                {
+                    board[row, col] = newValue;
+                    moved = true; 
+                }
+            }
+        }
+
+        if (moved)
+        {
+            GenerateNew();
+        }
+    }
+    private void MoveRight() { 
+        bool moved = false;
+
+        for (int row = 0; row < 4; row++)
+        {
+            List<int> numbers = new List<int>();
+            for (int col = 3; col >= 0; col--)
+            {
+                if (board[row, col] != 0)
+                {
+                    numbers.Add(board[row, col]);
+                }
+            }
+
+            List<int> mergedNumbers = new List<int>();
+            for (int i = 0; i < numbers.Count; i++)
+            {
+                if (i + 1 < numbers.Count && numbers[i] == numbers[i + 1])
+                {
+                    mergedNumbers.Add(numbers[i] * 2);
+                    currentSum += numbers[i] * 2;
+                    i++;
+                }
+                else
+                {
+                    mergedNumbers.Add(numbers[i]);
+                }
+            }
+
+            for (int col = 3; col >= 0; col--)
+            {
+                int indexInList = 3 - col; 
+                int newValue = indexInList < mergedNumbers.Count ? mergedNumbers[indexInList] : 0;
+
+                if (board[row, col] != newValue)
+                {
+                    board[row, col] = newValue;
+                    moved = true; 
+                }
+            }
+        }
+
+        if (moved)
+        {
+            GenerateNew();
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowUp":    MoveUp();    break;
+            case "ArrowDown":  MoveDown();  break;
+            case "ArrowLeft":  MoveLeft();  break;
+            case "ArrowRight": MoveRight(); break;
+        }
+    }
+}
